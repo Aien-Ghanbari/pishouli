@@ -1,0 +1,14 @@
+name = "pishouli-backend"
+main = "src/worker.js"
+compatibility_date = "2026-04-03"
+
+[vars]
+# Comma separated allowed origins. Use your GitHub Pages domain in production.
+ALLOWED_ORIGINS = "*"
+# Set this secret with `wrangler secret put BOOTSTRAP_KEY`.
+# BOOTSTRAP_KEY = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pishouli-db"
+database_id = "b178c805-f3b3-4060-a834-0a0b05bd3f24"

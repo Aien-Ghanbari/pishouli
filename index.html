@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>پیشولی</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="پیشولی">
+</head>
+<body>
+    
+    <div id="splash-screen">
+        <video id="intro-video" autoplay muted loop playsinline preload="auto" aria-label="Intro animation">
+            <source src="intro.mp4" type="video/mp4">
+        </video>
+        <div class="intro-overlay" aria-hidden="true"></div>
+        <button id="enter-btn" data-i18n="enterNow" onclick="skipIntro()">ورود</button>
+    </div>
+
+    <div class="top-center-controls" role="group" aria-label="Top Controls">
+        <div id="update-banner" class="hidden">
+            <button id="update-btn" onclick="reloadApp()" aria-label="Update app">↻</button>
+        </div>
+
+        <div class="lang-toggle" role="group" aria-label="Language Switcher">
+            <button type="button" onclick="setLanguage('fa')">فا</button>
+            <button type="button" onclick="setLanguage('en')">EN</button>
+        </div>
+
+        <div class="theme-toggle" role="group" aria-label="Theme Switcher">
+            <button type="button" id="theme-btn" onclick="cycleThemeMode()">Auto</button>
+        </div>
+
+        <div class="sound-toggle" role="group" aria-label="Sound Switcher">
+            <button type="button" id="sound-btn">🔊 Sound On</button>
+        </div>
+    </div>
+
+    <div id="pixel-cat" aria-hidden="true"></div>
+
+    <div id="vault" class="hidden">
+        <header>
+            <h1 data-i18n="vaultTitle">صندوقچه بهاری ما</h1>
+            <p data-i18n="vaultSubtitle">هر نامه فقط یک‌بار خوانده می‌شود...</p>
+        </header>
+
+        <main class="grid-container">
+            <div class="envelope mood-laugh" onclick="openLetter('laugh', this)">
+                <div class="seal"></div>
+                <p data-i18n="catLaugh">وقتی نیاز داری بخندی</p>
+            </div>
+            <div class="envelope mood-sad" onclick="openLetter('sad', this)">
+                <div class="seal"></div>
+                <p data-i18n="catSad">وقتی غمگین هستی</p>
+            </div>
+            <div class="envelope mood-hope" onclick="openLetter('hopeless', this)">
+                <div class="seal"></div>
+                <p data-i18n="catHopeless">وقتی ناامید هستی</p>
+            </div>
+            <div class="envelope mood-period" onclick="openLetter('period', this)">
+                <div class="seal"></div>
+                <p data-i18n="catPeriod">وقتی پریودی</p>
+            </div>
+            <div class="envelope full-width mood-naughty" onclick="openLetter('naughty', this)">
+                <div class="seal"></div>
+                <p data-i18n="catNaughty">وقتی شیطون شدی</p>
+            </div>
+        </main>
+    </div>
+
+    <div id="modal" class="hidden">
+        <div class="modal-content">
+            <button id="close-letter-btn" class="close-btn" type="button" aria-label="Close letter">&times;</button>
+            <h2 id="letter-title"></h2>
+            <div id="empty-illustration" class="is-hidden" aria-hidden="true"></div>
+            <p id="letter-body"></p>
+        </div>
+    </div>
+
+    <section id="admin-panel" class="hidden" aria-label="Admin Panel">
+        <header class="admin-header">
+            <h2>Letter Admin</h2>
+            <p>Manage letters and sync from your phone in a private admin view.</p>
+        </header>
+
+        <div class="admin-card">
+            <h3>Reading Settings</h3>
+            <label class="admin-switch" for="single-read-toggle">
+                <input type="checkbox" id="single-read-toggle">
+                <span>Allow reading each letter only once</span>
+            </label>
+        </div>
+
+        <div class="admin-card">
+            <h3>Add Or Edit Letter</h3>
+            <form id="letter-form">
+                <input type="hidden" id="letter-edit-id">
+                <label>Mood
+                    <select id="letter-category" required>
+                        <option value="laugh">Laugh</option>
+                        <option value="sad">Sad</option>
+                        <option value="hopeless">Hopeless</option>
+                        <option value="period">Period</option>
+                        <option value="naughty">Naughty</option>
+                    </select>
+                </label>
+                <div class="admin-grid-2">
+                    <label>Persian Title
+                        <input type="text" id="letter-title-fa-input" required maxlength="120">
+                    </label>
+                    <label>English Title
+                        <input type="text" id="letter-title-en-input" required maxlength="120">
+                    </label>
+                </div>
+                <div class="admin-grid-2">
+                    <label>Persian Body
+                        <textarea id="letter-body-fa-input" required rows="5" maxlength="5000"></textarea>
+                    </label>
+                    <label>English Body
+                        <textarea id="letter-body-en-input" required rows="5" maxlength="5000"></textarea>
+                    </label>
+                </div>
+                <div class="admin-actions-row">
+                    <button type="submit" id="save-letter-btn">Save Letter</button>
+                    <button type="button" id="cancel-edit-btn" class="secondary">Cancel Edit</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="admin-card">
+            <h3>All Letters</h3>
+            <div class="admin-grid-2">
+                <label>Display Language
+                    <select id="admin-display-lang">
+                        <option value="fa">Persian Titles</option>
+                        <option value="en">English Titles</option>
+                    </select>
+                </label>
+            </div>
+            <div id="letters-admin-list" class="admin-list"></div>
+        </div>
+
+        <div class="admin-card">
+            <h3>Cloud Sync (Worker + D1)</h3>
+            <p class="admin-note">Connect to your Cloudflare Worker backend. Admin phone can write, partner phone can read updates instantly.</p>
+            <form id="sync-form">
+                <div class="admin-grid-2">
+                    <label>Worker URL
+                        <input type="url" id="sync-worker-url" placeholder="https://pishouli-backend.pishouli.workers.dev" required>
+                    </label>
+                    <label>Room Code
+                        <input type="text" id="sync-room" placeholder="spring-room" required>
+                    </label>
+                </div>
+                <div class="admin-grid-2">
+                    <label>Room Key
+                        <input type="text" id="sync-room-key" placeholder="room secret used by both devices" required>
+                    </label>
+                    <label>Admin Key
+                        <input type="text" id="sync-admin-key" placeholder="required on admin phone for add/edit/delete">
+                    </label>
+                </div>
+                <p class="admin-note">One-tap share sends Worker URL + Room Code + Room Key only (no Admin Key).</p>
+                <div class="admin-actions-row">
+                    <button type="submit" id="connect-sync-btn">Connect Backend</button>
+                    <button type="button" id="share-setup-btn" class="secondary">Share Partner Setup</button>
+                    <button type="button" id="disconnect-sync-btn" class="secondary">Disconnect</button>
+                </div>
+            </form>
+            <p id="sync-status" class="admin-note">Disconnected. Enter Worker URL and keys to connect.</p>
+        </div>
+
+        <div class="admin-card">
+            <h3>Vault Click Logs</h3>
+            <div class="admin-actions-row">
+                <button type="button" id="clear-logs-btn" class="secondary">Clear Logs</button>
+            </div>
+            <div id="vault-logs" class="admin-list"></div>
+        </div>
+
+        <div class="admin-card">
+            <h3>Last 5 Visits</h3>
+            <div id="recent-visits" class="admin-list"></div>
+        </div>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>
