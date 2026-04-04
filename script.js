@@ -478,16 +478,12 @@ async function pullRemoteSnapshot() {
 
 async function pullRemoteAdminLogs() {
     if (!remoteSync.adminKey) {
-        return;
+        throw new Error("Missing Admin Key for admin logs.");
     }
 
-    try {
-        const payload = await syncApi("/api/admin/logs", "GET", null, true);
-        remoteSync.clickLogs = Array.isArray(payload?.clickLogs) ? payload.clickLogs : [];
-        remoteSync.lastVisits = Array.isArray(payload?.lastVisits) ? payload.lastVisits : [];
-    } catch (error) {
-        // non-blocking
-    }
+    const payload = await syncApi("/api/admin/logs", "GET", null, true);
+    remoteSync.clickLogs = Array.isArray(payload?.clickLogs) ? payload.clickLogs : [];
+    remoteSync.lastVisits = Array.isArray(payload?.lastVisits) ? payload.lastVisits : [];
 }
 
 async function pushLettersSnapshot() {
@@ -499,8 +495,10 @@ async function pushLettersSnapshot() {
         await syncApi("/api/letters/sync", "PUT", {
             letters: convertMessagesToBackendLetters(messages)
         }, true);
+        updateSyncStatus(`Connected to ${remoteSync.roomId} (read/write).`);
     } catch (error) {
         console.warn("Failed to sync letters:", error);
+        updateSyncStatus(`Save failed: ${error.message}. Check Admin Key and reconnect.`, true);
     }
 }
 
@@ -511,8 +509,10 @@ async function pushReadMode() {
 
     try {
         await syncApi("/api/settings", "PUT", { singleReadMode }, true);
+        updateSyncStatus(`Connected to ${remoteSync.roomId} (read/write).`);
     } catch (error) {
         console.warn("Failed to sync read mode:", error);
+        updateSyncStatus(`Read mode sync failed: ${error.message}.`, true);
     }
 }
 
@@ -587,6 +587,7 @@ async function connectRemoteSync(config, persistConfig = true) {
     try {
         await pullRemoteSnapshot();
         if (isAdminMode) {
+            // Validate admin key early so add/edit/delete won't silently fail.
             await pullRemoteAdminLogs();
         }
     } catch (error) {
