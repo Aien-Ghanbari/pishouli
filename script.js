@@ -1297,18 +1297,16 @@ function showLetterModal(category) {
     const body = document.getElementById("letter-body");
     const emptyIllustration = document.getElementById("empty-illustration");
 
-    const readLetters = getReadLetters();
     const allCategoryLetters = messages[currentLang][category] || [];
     const visibleLetters = allCategoryLetters.filter((letter) => isLetterVisible(letter.id));
-    const unreadLetters = visibleLetters.filter((letter) => !readLetters.includes(letter.id));
     let currentLetter = null;
     let isEmpty = false;
 
     const moodTheme = category === "hopeless" ? "hope" : category;
 
     if (singleReadMode) {
-        if (unreadLetters.length > 0) {
-            currentLetter = unreadLetters[0];
+        if (visibleLetters.length > 0) {
+            currentLetter = visibleLetters[0];
             markAsRead(currentLetter.id);
         } else {
             isEmpty = true;
