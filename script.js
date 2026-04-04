@@ -61,6 +61,7 @@ const translations = {
         emptyBodyPeriod: "This comfort pocket is resting for now.",
         emptyBodyNaughty: "This playful pocket is resting for now."
     }
+};
 
 function updateBuildVersionLabel(version) {
     const label = document.getElementById("build-version-label");
@@ -71,7 +72,6 @@ function updateBuildVersionLabel(version) {
     const text = version ? `Build: ${version}` : "Build: unknown";
     label.textContent = text;
 }
-};
 
 const DEFAULT_MESSAGES = {
     fa: {
