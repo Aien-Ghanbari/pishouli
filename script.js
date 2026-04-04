@@ -61,6 +61,16 @@ const translations = {
         emptyBodyPeriod: "This comfort pocket is resting for now.",
         emptyBodyNaughty: "This playful pocket is resting for now."
     }
+
+function updateBuildVersionLabel(version) {
+    const label = document.getElementById("build-version-label");
+    if (!label) {
+        return;
+    }
+
+    const text = version ? `Build: ${version}` : "Build: unknown";
+    label.textContent = text;
+}
 };
 
 const DEFAULT_MESSAGES = {
@@ -1467,6 +1477,8 @@ async function fetchBuildVersion() {
             return null;
         }
 
+        localStorage.setItem("lastKnownBuildVersion", payload.version);
+
         return payload.version;
     } catch (error) {
         console.warn("Build version check failed:", error);
@@ -2281,6 +2293,7 @@ window.addEventListener("load", () => {
     fetchBuildVersion()
         .then((version) => {
             currentBuildVersion = version;
+            updateBuildVersionLabel(version);
             return registerServiceWorkerWithVersion(version);
         })
         .then(() => {
@@ -2292,6 +2305,10 @@ window.addEventListener("load", () => {
                 checkForBuildUpdates();
             }, 60000);
         });
+
+    if (!currentBuildVersion) {
+        updateBuildVersionLabel(localStorage.getItem("lastKnownBuildVersion") || "unknown");
+    }
 });
 
 window.addEventListener("beforeunload", () => {

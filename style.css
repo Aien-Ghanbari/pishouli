@@ -1114,6 +1114,18 @@ body.admin-mode {
     line-height: 1.6;
 }
 
+.admin-build-label {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(156, 103, 128, 0.35);
+    background: rgba(255, 255, 255, 0.62);
+    color: #7a4a5f;
+    font-size: 11px;
+    letter-spacing: 0.2px;
+}
+
 .admin-card {
     background: linear-gradient(165deg, rgba(255, 255, 255, 0.95), rgba(255, 249, 252, 0.82));
     border: 1px solid rgba(203, 121, 151, 0.34);
