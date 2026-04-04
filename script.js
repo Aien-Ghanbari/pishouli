@@ -24,11 +24,11 @@ const translations = {
         soundHintOff: "صدا خاموش است",
         emptyTitle: "صندوقچه خالی است",
         emptyBody: "این جیب فعلا در حال استراحت است. بعدا دوباره سر بزن.",
-        emptyBodyLaugh: "این گوشه خنده فعلا در حال استراحت است.",
-        emptyBodySad: "این گوشه غم فعلا آرام گرفته است.",
-        emptyBodyHopeless: "این گوشه امید فعلا آرام نفس می کشد.",
-        emptyBodyPeriod: "این گوشه مراقبت فعلا در حال استراحت است.",
-        emptyBodyNaughty: "این گوشه بازیگوشی فعلا آرام شده است."
+        emptyBodyLaugh: "خنده نداریم برو گریه کن.",
+        emptyBodySad: "میشه ناراحت نباشی پیشی؟",
+        emptyBodyHopeless: "این دختر قویه، دوباره سبز میشه",
+        emptyBodyPeriod: "مراقبت کن از خودت تا من برسم.",
+        emptyBodyNaughty: "شیطون بلا برو به خودش بگو اون همیشه پایست."
     },
     en: {
         pageTitle: "Pishouli",
