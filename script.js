@@ -129,6 +129,7 @@ let updateCheckTimer = null;
 let meowTimer = null;
 let swListenersBound = false;
 let meowAudioPool = [];
+let lastRemoteContentSignature = null;
 const BUILD_VERSION_ENDPOINT = "./build-version.json";
 const LETTERS_STORAGE_KEY = "lettersData";
 const READ_MODE_STORAGE_KEY = "singleReadMode";
@@ -383,6 +384,7 @@ function disconnectRemoteSync(options = { clearConfig: false }) {
     remoteSync.pollTimer = null;
     remoteSync.clickLogs = [];
     remoteSync.lastVisits = [];
+    lastRemoteContentSignature = null;
 
     if (options.clearConfig) {
         clearRemoteSyncConfig();
@@ -483,6 +485,17 @@ async function pullRemoteSnapshot() {
     if (!snapshot) {
         return;
     }
+
+    const contentSignature = JSON.stringify({
+        letters: snapshot.letters || [],
+        singleReadMode: !!(snapshot.settings && snapshot.settings.singleReadMode)
+    });
+
+    if (lastRemoteContentSignature && lastRemoteContentSignature !== contentSignature) {
+        showUpdateButton();
+    }
+
+    lastRemoteContentSignature = contentSignature;
 
     remoteSync.applyingRemote = true;
     messages = convertBackendLettersToMessages(snapshot.letters || []);
@@ -1274,6 +1287,10 @@ function setLetterVisibility(id, isVisible) {
     const visibility = getLetterVisibilityMap();
     if (isVisible) {
         delete visibility[id];
+
+        const readLetters = getReadLetters();
+        const filteredReadLetters = readLetters.filter((item) => item !== id);
+        localStorage.setItem(READ_LETTERS_STORAGE_KEY, JSON.stringify(filteredReadLetters));
     } else {
         visibility[id] = false;
     }
