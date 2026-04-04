@@ -1308,6 +1308,24 @@ body.admin-mode {
     font-weight: 700;
 }
 
+.admin-visibility-flag {
+    width: fit-content;
+    font-size: 11px;
+    text-transform: lowercase;
+    padding: 0;
+    margin-bottom: 2px;
+}
+
+.admin-visibility-flag.visible {
+    color: #5d7468;
+    font-weight: 600;
+}
+
+.admin-visibility-flag.hidden {
+    color: #aa6b78;
+    font-weight: 700;
+}
+
 .icon-btn {
     width: 36px;
     height: 36px;
@@ -1317,6 +1335,12 @@ body.admin-mode {
     padding: 0;
     font-size: 16px;
     line-height: 1;
+}
+
+.visibility-btn.is-hidden {
+    border-color: #cf8c9d;
+    color: #9b3c56;
+    background: #fff0f4;
 }
 
 .admin-actions-inline {

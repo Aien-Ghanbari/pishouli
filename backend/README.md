@@ -61,6 +61,12 @@ wrangler d1 create pishouli-db
 wrangler d1 execute pishouli-db --file=./migrations/0001_init.sql
 ```
 
+If you already deployed an older version before visibility toggles, also run:
+
+```bash
+wrangler d1 execute pishouli-db --remote --file=./migrations/0002_add_letter_visibility.sql
+```
+
 6. Set bootstrap secret
 
 ```bash

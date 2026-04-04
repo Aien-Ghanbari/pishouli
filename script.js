@@ -42,7 +42,7 @@ const translations = {
         catSad: "When you feel sad",
         catHopeless: "When you feel hopeless",
         catPeriod: "When you are on your period",
-        catNaughty: "When you get playful",
+        catNaughty: "When you get naughty",
         themeAuto: "Auto",
         themeMorning: "Morning",
         themeEvening: "Evening",
@@ -97,7 +97,7 @@ const DEFAULT_MESSAGES = {
             { id: "period_1", title: "Day One", body: "Do not forget warm tea and rest..." }
         ],
         naughty: [
-            { id: "naughty_1", title: "Playful Letter One", body: "Your text goes here..." }
+            { id: "naughty_1", title: "Naughty Letter One", body: "Your text goes here..." }
         ]
     }
 };
@@ -125,6 +125,7 @@ const READ_MODE_STORAGE_KEY = "singleReadMode";
 const ACTIVITY_LOGS_STORAGE_KEY = "activityLogs";
 const SEEN_LETTERS_STORAGE_KEY = "seenLetters";
 const READ_LETTERS_STORAGE_KEY = "readLetters";
+const LETTER_VISIBILITY_STORAGE_KEY = "letterVisibility";
 const VISIT_LOGS_STORAGE_KEY = "visitLogs";
 const ACTIVE_VISIT_ID_KEY = "activeVisitId";
 const REMOTE_VISIT_ID_KEY = "remoteVisitId";
@@ -382,7 +383,9 @@ function disconnectRemoteSync(options = { clearConfig: false }) {
 
 function convertBackendLettersToMessages(rows) {
     const normalized = deepClone(DEFAULT_MESSAGES);
+    const visibility = {};
     if (!Array.isArray(rows)) {
+        saveLetterVisibilityMap(visibility);
         return normalized;
     }
 
@@ -398,6 +401,9 @@ function convertBackendLettersToMessages(rows) {
         }
 
         const id = String(row.id || `${mood}_${Date.now()}_${Math.floor(Math.random() * 1000)}`);
+        if (row.is_visible === 0 || row.is_visible === false) {
+            visibility[id] = false;
+        }
         normalized.fa[mood].push({
             id,
             title: String(row.title_fa || ""),
@@ -409,6 +415,8 @@ function convertBackendLettersToMessages(rows) {
             body: String(row.body_en || "")
         });
     });
+
+    saveLetterVisibilityMap(visibility);
 
     return normalized;
 }
@@ -429,7 +437,8 @@ function convertMessagesToBackendLetters(payload) {
                 titleFa: item.title || "",
                 bodyFa: item.body || "",
                 titleEn: "",
-                bodyEn: ""
+                bodyEn: "",
+                isVisible: isLetterVisible(item.id)
             });
         });
 
@@ -440,7 +449,8 @@ function convertMessagesToBackendLetters(payload) {
                 titleFa: "",
                 bodyFa: "",
                 titleEn: "",
-                bodyEn: ""
+                bodyEn: "",
+                isVisible: isLetterVisible(item.id)
             };
             existing.titleEn = item.title || "";
             existing.bodyEn = item.body || "";
@@ -1227,6 +1237,49 @@ function markAsRead(id) {
     }
 }
 
+function getLetterVisibilityMap() {
+    const saved = localStorage.getItem(LETTER_VISIBILITY_STORAGE_KEY);
+    if (!saved) {
+        return {};
+    }
+
+    try {
+        const parsed = JSON.parse(saved);
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (error) {
+        return {};
+    }
+}
+
+function saveLetterVisibilityMap(map) {
+    localStorage.setItem(LETTER_VISIBILITY_STORAGE_KEY, JSON.stringify(map));
+}
+
+function isLetterVisible(id) {
+    const visibility = getLetterVisibilityMap();
+    return visibility[id] !== false;
+}
+
+function setLetterVisibility(id, isVisible) {
+    const visibility = getLetterVisibilityMap();
+    if (isVisible) {
+        delete visibility[id];
+    } else {
+        visibility[id] = false;
+    }
+    saveLetterVisibilityMap(visibility);
+    writeRemote("letters", messages);
+}
+
+function clearLetterVisibility(id) {
+    const visibility = getLetterVisibilityMap();
+    if (Object.prototype.hasOwnProperty.call(visibility, id)) {
+        delete visibility[id];
+        saveLetterVisibilityMap(visibility);
+        writeRemote("letters", messages);
+    }
+}
+
 function showLetterModal(category) {
     const modal = document.getElementById("modal");
     const modalContent = modal.querySelector(".modal-content");
@@ -1236,7 +1289,8 @@ function showLetterModal(category) {
 
     const readLetters = getReadLetters();
     const allCategoryLetters = messages[currentLang][category] || [];
-    const unreadLetters = allCategoryLetters.filter((letter) => !readLetters.includes(letter.id));
+    const visibleLetters = allCategoryLetters.filter((letter) => isLetterVisible(letter.id));
+    const unreadLetters = visibleLetters.filter((letter) => !readLetters.includes(letter.id));
     let currentLetter = null;
     let isEmpty = false;
 
@@ -1249,9 +1303,9 @@ function showLetterModal(category) {
         } else {
             isEmpty = true;
         }
-    } else if (allCategoryLetters.length > 0) {
-        const randomIndex = Math.floor(Math.random() * allCategoryLetters.length);
-        currentLetter = allCategoryLetters[randomIndex];
+    } else if (visibleLetters.length > 0) {
+        const randomIndex = Math.floor(Math.random() * visibleLetters.length);
+        currentLetter = visibleLetters[randomIndex];
     } else {
         isEmpty = true;
     }
@@ -1268,6 +1322,10 @@ function showLetterModal(category) {
         body.innerText = currentLetter.body;
         body.classList.add("has-letter");
         body.classList.remove("is-empty-copy");
+
+        if (singleReadMode) {
+            setLetterVisibility(currentLetter.id, false);
+        }
     } else {
         title.innerText = getTranslation("emptyTitle");
         body.innerText = getTranslation(getMoodEmptyKey(category));
@@ -1490,7 +1548,7 @@ function getMoodLabel(category) {
         sad: "Sad",
         hopeless: "Hopeless",
         period: "Period",
-        naughty: "Playful"
+        naughty: "Naughty"
     };
     return labels[category] || category;
 }
@@ -1590,8 +1648,13 @@ function renderAdminLetters() {
 
         const rows = bucket.map((record) => {
             const read = seenSet.has(record.id);
+            const visible = isLetterVisible(record.id);
             const flagClass = read ? "read" : "not-read";
             const flagText = read ? "read" : "not read";
+            const visibilityClass = visible ? "visible" : "hidden";
+            const visibilityText = visible ? "visible" : "hidden";
+            const visibilityIcon = visible ? "👁" : "🚫";
+            const visibilityTitle = visible ? "Hide letter" : "Show letter";
             const title = displayLang === "fa"
                 ? ((record.fa && record.fa.title) || (record.en && record.en.title) || "بدون عنوان")
                 : ((record.en && record.en.title) || (record.fa && record.fa.title) || "Untitled");
@@ -1600,10 +1663,12 @@ function renderAdminLetters() {
                 <div class="admin-item">
                     <div class="admin-item-main">
                         <small class="admin-read-flag ${flagClass}">${flagText}</small>
+                        <small class="admin-visibility-flag ${visibilityClass}">${visibilityText}</small>
                         <strong>${escapeHtml(title)}</strong>
                         <small>ID: ${escapeHtml(record.id)}</small>
                     </div>
                     <div class="admin-actions-inline">
+                        <button type="button" class="icon-btn visibility-btn ${visible ? "" : "is-hidden"}" title="${visibilityTitle}" data-action="toggle-visibility" data-category="${category}" data-id="${escapeHtml(record.id)}">${visibilityIcon}</button>
                         <button type="button" class="icon-btn" title="Edit" data-action="edit" data-category="${category}" data-id="${escapeHtml(record.id)}">✏</button>
                         <button type="button" class="icon-btn danger" title="Delete" data-action="delete" data-category="${category}" data-id="${escapeHtml(record.id)}">🗑</button>
                     </div>
@@ -1839,6 +1904,8 @@ function initAdminMode() {
             messages.fa[category].push({ id: letterId, title: titleFa, body: bodyFa });
             messages.en[category].push({ id: letterId, title: titleEn, body: bodyEn });
 
+            setLetterVisibility(letterId, true);
+
             saveLettersData();
             resetLetterForm();
             refreshAdminView();
@@ -1871,7 +1938,15 @@ function initAdminMode() {
                     });
                 });
 
+                clearLetterVisibility(id);
+
                 saveLettersData();
+                refreshAdminView();
+                return;
+            }
+
+            if (action === "toggle-visibility") {
+                setLetterVisibility(id, !isLetterVisible(id));
                 refreshAdminView();
                 return;
             }

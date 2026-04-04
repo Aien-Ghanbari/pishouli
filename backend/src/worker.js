@@ -253,7 +253,7 @@ async function bootstrapRoom(request, env, corsHeaders) {
 
   const [lettersRes, settings] = await Promise.all([
     env.DB.prepare(
-      "SELECT id, mood, title_fa, body_fa, title_en, body_en, created_at, updated_at FROM letters WHERE room_id = ?1 AND deleted = 0 ORDER BY created_at ASC"
+      "SELECT id, mood, title_fa, body_fa, title_en, body_en, is_visible, created_at, updated_at FROM letters WHERE room_id = ?1 AND deleted = 0 ORDER BY created_at ASC"
     ).bind(auth.roomId).all(),
     env.DB.prepare(
       "SELECT single_read_mode FROM settings WHERE room_id = ?1"
@@ -276,7 +276,7 @@ async function getLetters(request, env, corsHeaders) {
   }
 
   const rows = await env.DB.prepare(
-    "SELECT id, mood, title_fa, body_fa, title_en, body_en, created_at, updated_at FROM letters WHERE room_id = ?1 AND deleted = 0 ORDER BY created_at ASC"
+    "SELECT id, mood, title_fa, body_fa, title_en, body_en, is_visible, created_at, updated_at FROM letters WHERE room_id = ?1 AND deleted = 0 ORDER BY created_at ASC"
   ).bind(auth.roomId).all();
 
   return json({ letters: rows.results || [] }, 200, corsHeaders);
@@ -303,7 +303,7 @@ async function createLetter(request, env, corsHeaders) {
   const now = nowIso();
 
   await env.DB.prepare(
-    "INSERT INTO letters (id, room_id, mood, title_fa, body_fa, title_en, body_en, created_at, updated_at, deleted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0)"
+    "INSERT INTO letters (id, room_id, mood, title_fa, body_fa, title_en, body_en, is_visible, created_at, updated_at, deleted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, 0)"
   ).bind(id, auth.roomId, mood, titleFa, bodyFa, titleEn, bodyEn, now, now).run();
 
   return json({ ok: true, id }, 201, corsHeaders);
@@ -329,12 +329,13 @@ async function syncLetters(request, env, corsHeaders) {
     const bodyFa = ensureString(item?.bodyFa, 5000);
     const titleEn = ensureString(item?.titleEn, 200);
     const bodyEn = ensureString(item?.bodyEn, 5000);
+    const isVisible = item?.isVisible === false ? 0 : 1;
 
     if (!mood || !id || !titleFa || !bodyFa || !titleEn || !bodyEn) {
       continue;
     }
 
-    normalized.push({ id, mood, titleFa, bodyFa, titleEn, bodyEn });
+    normalized.push({ id, mood, titleFa, bodyFa, titleEn, bodyEn, isVisible });
   }
 
   const now = nowIso();
@@ -345,7 +346,7 @@ async function syncLetters(request, env, corsHeaders) {
 
   for (const letter of normalized) {
     await env.DB.prepare(
-      "INSERT INTO letters (id, room_id, mood, title_fa, body_fa, title_en, body_en, created_at, updated_at, deleted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0) ON CONFLICT(id) DO UPDATE SET room_id=excluded.room_id, mood=excluded.mood, title_fa=excluded.title_fa, body_fa=excluded.body_fa, title_en=excluded.title_en, body_en=excluded.body_en, updated_at=excluded.updated_at, deleted=0"
+      "INSERT INTO letters (id, room_id, mood, title_fa, body_fa, title_en, body_en, is_visible, created_at, updated_at, deleted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0) ON CONFLICT(id) DO UPDATE SET room_id=excluded.room_id, mood=excluded.mood, title_fa=excluded.title_fa, body_fa=excluded.body_fa, title_en=excluded.title_en, body_en=excluded.body_en, is_visible=excluded.is_visible, updated_at=excluded.updated_at, deleted=0"
     ).bind(
       letter.id,
       auth.roomId,
@@ -354,6 +355,7 @@ async function syncLetters(request, env, corsHeaders) {
       letter.bodyFa,
       letter.titleEn,
       letter.bodyEn,
+      letter.isVisible,
       now,
       now
     ).run();

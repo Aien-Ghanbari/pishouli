@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS letters (
   body_fa TEXT NOT NULL,
   title_en TEXT NOT NULL,
   body_en TEXT NOT NULL,
+  is_visible INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   deleted INTEGER NOT NULL DEFAULT 0,
