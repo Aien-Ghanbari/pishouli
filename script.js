@@ -171,8 +171,8 @@ const remoteSync = {
 
 let autoTranslateTitleEnabled = false;
 let autoFinglishBodyEnabled = false;
-let titleTranslateDebounceTimer = null;
-let titleTranslateRequestId = 0;
+let autoTitleTranslateTimer = null;
+let autoTitleRequestCounter = 0;
 
 const TITLE_WORD_TRANSLATIONS = {
     "سلام": "hello",
@@ -289,6 +289,10 @@ function toTitleCase(value) {
         .join(" ");
 }
 
+function containsPersianCharacters(value) {
+    return /[\u0600-\u06FF]/.test(String(value || ""));
+}
+
 function transliteratePersianToFinglish(value) {
     let result = "";
     const text = String(value || "");
@@ -306,7 +310,7 @@ function transliteratePersianToFinglish(value) {
     return result.replace(/\s+/g, " ").trim();
 }
 
-function translatePersianTitleToEnglish(value) {
+function translatePersianTitleByDictionary(value) {
     const raw = String(value || "").trim();
     if (!raw) {
         return "";
@@ -329,65 +333,36 @@ function translatePersianTitleToEnglish(value) {
     return toTitleCase(translated);
 }
 
-async function translatePersianTitleOnline(value) {
-    const text = String(value || "").trim();
-    if (!text) {
+async function translatePersianTitleToEnglish(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
         return "";
     }
 
-    const endpoint = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=fa&tl=en&dt=t&q=${encodeURIComponent(text)}`;
-    const response = await fetch(endpoint, { method: "GET" });
-    if (!response.ok) {
-        throw new Error(`Translation failed with ${response.status}`);
+    if (!containsPersianCharacters(raw)) {
+        return toTitleCase(raw);
     }
-
-    const payload = await response.json();
-    const segments = Array.isArray(payload && payload[0]) ? payload[0] : [];
-    const translated = segments
-        .map((segment) => (Array.isArray(segment) ? String(segment[0] || "") : ""))
-        .join("")
-        .trim();
-
-    return translated || "";
-}
-
-async function autoTranslateTitleFieldNow() {
-    const titleFaInput = document.getElementById("letter-title-fa-input");
-    const titleEnInput = document.getElementById("letter-title-en-input");
-    if (!titleFaInput || !titleEnInput || !autoTranslateTitleEnabled) {
-        return;
-    }
-
-    const sourceText = titleFaInput.value.trim();
-    if (!sourceText) {
-        titleEnInput.value = "";
-        return;
-    }
-
-    const requestId = ++titleTranslateRequestId;
 
     try {
-        const translated = await translatePersianTitleOnline(sourceText);
-        if (requestId !== titleTranslateRequestId) {
-            return;
+        const endpoint = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=fa|en`;
+        const response = await fetch(endpoint, { method: "GET", cache: "no-store" });
+        if (response.ok) {
+            const payload = await response.json();
+            const translated = String(payload?.responseData?.translatedText || "").trim();
+            if (translated && !containsPersianCharacters(translated)) {
+                return toTitleCase(translated);
+            }
         }
-        titleEnInput.value = translated;
     } catch (error) {
-        if (requestId !== titleTranslateRequestId) {
-            return;
-        }
-        titleEnInput.value = translatePersianTitleToEnglish(sourceText);
-    }
-}
-
-function queueAutoTranslateTitle() {
-    if (titleTranslateDebounceTimer) {
-        clearTimeout(titleTranslateDebounceTimer);
+        // Fallback dictionary below.
     }
 
-    titleTranslateDebounceTimer = setTimeout(() => {
-        autoTranslateTitleFieldNow();
-    }, 450);
+    const fallback = translatePersianTitleByDictionary(raw);
+    if (fallback && !containsPersianCharacters(fallback)) {
+        return toTitleCase(fallback);
+    }
+
+    return "";
 }
 
 function loadAutoTextToolsSettings() {
@@ -411,16 +386,52 @@ function runAutoTextTools(force = false) {
     }
 
     if (autoTranslateTitleEnabled && (force || document.activeElement !== titleEnInput)) {
-        if (force) {
-            void autoTranslateTitleFieldNow();
-        } else {
-            queueAutoTranslateTitle();
-        }
+        scheduleAutoTitleTranslation(force);
     }
 
     if (autoFinglishBodyEnabled && (force || document.activeElement !== bodyEnInput)) {
         bodyEnInput.value = transliteratePersianToFinglish(bodyFaInput.value);
     }
+}
+
+function scheduleAutoTitleTranslation(force = false) {
+    const titleFaInput = document.getElementById("letter-title-fa-input");
+    const titleEnInput = document.getElementById("letter-title-en-input");
+
+    if (!titleFaInput || !titleEnInput || !autoTranslateTitleEnabled) {
+        return;
+    }
+
+    if (!force && document.activeElement === titleEnInput) {
+        return;
+    }
+
+    const titleFa = String(titleFaInput.value || "").trim();
+    if (!titleFa) {
+        titleEnInput.value = "";
+        return;
+    }
+
+    if (autoTitleTranslateTimer) {
+        clearTimeout(autoTitleTranslateTimer);
+        autoTitleTranslateTimer = null;
+    }
+
+    const requestId = ++autoTitleRequestCounter;
+    autoTitleTranslateTimer = setTimeout(async () => {
+        const translated = await translatePersianTitleToEnglish(titleFa);
+        if (requestId !== autoTitleRequestCounter) {
+            return;
+        }
+
+        if (!force && document.activeElement === titleEnInput) {
+            return;
+        }
+
+        if (translated) {
+            titleEnInput.value = translated;
+        }
+    }, force ? 0 : 300);
 }
 
 function normalizeImageValue(rawValue) {
@@ -2300,7 +2311,6 @@ function initAdminMode() {
         autoTranslateTitleToggle.addEventListener("change", () => {
             autoTranslateTitleEnabled = autoTranslateTitleToggle.checked;
             saveAutoTextToolsSettings();
-            titleTranslateRequestId += 1;
             runAutoTextTools(true);
         });
     }
