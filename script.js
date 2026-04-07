@@ -324,7 +324,9 @@ function fallbackTranslatePersianTitleToEnglish(value) {
         if (translatedWord) {
             return translatedWord;
         }
-        return transliteratePersianToFinglish(token);
+        // Do not transliterate title fallback to Finglish.
+        // Keep unknown tokens unchanged so title stays non-Finglish.
+        return token;
     }).join(" ");
 
     return toTitleCase(translated);
@@ -358,7 +360,29 @@ async function translatePersianTitleToEnglish(value) {
             }
         }
     } catch (error) {
-        // Fallback keeps feature usable even if external translation is blocked.
+        // Try second free endpoint before fallback.
+    }
+
+    try {
+        const response = await fetch(
+            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=fa|en`,
+            { method: "GET", cache: "no-store" }
+        );
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const translated = payload && payload.responseData
+            ? String(payload.responseData.translatedText || "").trim()
+            : "";
+
+        if (translated) {
+            return translated;
+        }
+    } catch (error) {
+        // Fallback keeps feature usable even if external translation endpoints are blocked.
     }
 
     return fallbackTranslatePersianTitleToEnglish(raw);
