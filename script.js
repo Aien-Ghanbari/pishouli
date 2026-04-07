@@ -171,6 +171,8 @@ const remoteSync = {
 
 let autoTranslateTitleEnabled = false;
 let autoFinglishBodyEnabled = false;
+let titleTranslateDebounceTimer = null;
+let titleTranslateRequestId = 0;
 
 const TITLE_WORD_TRANSLATIONS = {
     "سلام": "hello",
@@ -321,10 +323,71 @@ function translatePersianTitleToEnglish(value) {
         if (translatedWord) {
             return translatedWord;
         }
-        return transliteratePersianToFinglish(token);
+        return token;
     }).join(" ");
 
     return toTitleCase(translated);
+}
+
+async function translatePersianTitleOnline(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+        return "";
+    }
+
+    const endpoint = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=fa&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+    const response = await fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+        throw new Error(`Translation failed with ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const segments = Array.isArray(payload && payload[0]) ? payload[0] : [];
+    const translated = segments
+        .map((segment) => (Array.isArray(segment) ? String(segment[0] || "") : ""))
+        .join("")
+        .trim();
+
+    return translated || "";
+}
+
+async function autoTranslateTitleFieldNow() {
+    const titleFaInput = document.getElementById("letter-title-fa-input");
+    const titleEnInput = document.getElementById("letter-title-en-input");
+    if (!titleFaInput || !titleEnInput || !autoTranslateTitleEnabled) {
+        return;
+    }
+
+    const sourceText = titleFaInput.value.trim();
+    if (!sourceText) {
+        titleEnInput.value = "";
+        return;
+    }
+
+    const requestId = ++titleTranslateRequestId;
+
+    try {
+        const translated = await translatePersianTitleOnline(sourceText);
+        if (requestId !== titleTranslateRequestId) {
+            return;
+        }
+        titleEnInput.value = translated;
+    } catch (error) {
+        if (requestId !== titleTranslateRequestId) {
+            return;
+        }
+        titleEnInput.value = translatePersianTitleToEnglish(sourceText);
+    }
+}
+
+function queueAutoTranslateTitle() {
+    if (titleTranslateDebounceTimer) {
+        clearTimeout(titleTranslateDebounceTimer);
+    }
+
+    titleTranslateDebounceTimer = setTimeout(() => {
+        autoTranslateTitleFieldNow();
+    }, 450);
 }
 
 function loadAutoTextToolsSettings() {
@@ -348,7 +411,11 @@ function runAutoTextTools(force = false) {
     }
 
     if (autoTranslateTitleEnabled && (force || document.activeElement !== titleEnInput)) {
-        titleEnInput.value = translatePersianTitleToEnglish(titleFaInput.value);
+        if (force) {
+            void autoTranslateTitleFieldNow();
+        } else {
+            queueAutoTranslateTitle();
+        }
     }
 
     if (autoFinglishBodyEnabled && (force || document.activeElement !== bodyEnInput)) {
@@ -2233,6 +2300,7 @@ function initAdminMode() {
         autoTranslateTitleToggle.addEventListener("change", () => {
             autoTranslateTitleEnabled = autoTranslateTitleToggle.checked;
             saveAutoTextToolsSettings();
+            titleTranslateRequestId += 1;
             runAutoTextTools(true);
         });
     }
