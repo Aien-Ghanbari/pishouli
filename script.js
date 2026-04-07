@@ -144,6 +144,7 @@ const VISITOR_ID_KEY = "visitorId";
 const REMOTE_SYNC_CONFIG_KEY = "remoteSyncConfig";
 const AUTO_TRANSLATE_TITLE_KEY = "autoTranslateTitleEnabled";
 const AUTO_FINGLISH_BODY_KEY = "autoFinglishBodyEnabled";
+const TITLE_TRANSLATE_DEBOUNCE_MS = 450;
 // Keep this private between you two. Admin mode opens only when URL has admin=1 and this key.
 const ADMIN_ACCESS_TOKEN = "spring-cat-2026";
 const MEOW_SOUND_FILES = [
@@ -171,8 +172,8 @@ const remoteSync = {
 
 let autoTranslateTitleEnabled = false;
 let autoFinglishBodyEnabled = false;
-let autoTitleTranslateTimer = null;
-let autoTitleRequestCounter = 0;
+let titleTranslateTimer = null;
+let titleTranslateRequestId = 0;
 
 const TITLE_WORD_TRANSLATIONS = {
     "سلام": "hello",
@@ -289,10 +290,6 @@ function toTitleCase(value) {
         .join(" ");
 }
 
-function containsPersianCharacters(value) {
-    return /[\u0600-\u06FF]/.test(String(value || ""));
-}
-
 function transliteratePersianToFinglish(value) {
     let result = "";
     const text = String(value || "");
@@ -310,7 +307,7 @@ function transliteratePersianToFinglish(value) {
     return result.replace(/\s+/g, " ").trim();
 }
 
-function translatePersianTitleByDictionary(value) {
+function fallbackTranslatePersianTitleToEnglish(value) {
     const raw = String(value || "").trim();
     if (!raw) {
         return "";
@@ -327,7 +324,7 @@ function translatePersianTitleByDictionary(value) {
         if (translatedWord) {
             return translatedWord;
         }
-        return token;
+        return transliteratePersianToFinglish(token);
     }).join(" ");
 
     return toTitleCase(translated);
@@ -339,30 +336,32 @@ async function translatePersianTitleToEnglish(value) {
         return "";
     }
 
-    if (!containsPersianCharacters(raw)) {
-        return toTitleCase(raw);
-    }
-
     try {
-        const endpoint = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=fa|en`;
-        const response = await fetch(endpoint, { method: "GET", cache: "no-store" });
-        if (response.ok) {
-            const payload = await response.json();
-            const translated = String(payload?.responseData?.translatedText || "").trim();
-            if (translated && !containsPersianCharacters(translated)) {
-                return toTitleCase(translated);
+        const response = await fetch(
+            `https://translate.googleapis.com/translate_a/single?client=gtx&sl=fa&tl=en&dt=t&q=${encodeURIComponent(raw)}`,
+            { method: "GET", cache: "no-store" }
+        );
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (Array.isArray(payload) && Array.isArray(payload[0])) {
+            const translated = payload[0]
+                .map((chunk) => Array.isArray(chunk) ? String(chunk[0] || "") : "")
+                .join("")
+                .trim();
+
+            if (translated) {
+                return translated;
             }
         }
     } catch (error) {
-        // Fallback dictionary below.
+        // Fallback keeps feature usable even if external translation is blocked.
     }
 
-    const fallback = translatePersianTitleByDictionary(raw);
-    if (fallback && !containsPersianCharacters(fallback)) {
-        return toTitleCase(fallback);
-    }
-
-    return "";
+    return fallbackTranslatePersianTitleToEnglish(raw);
 }
 
 function loadAutoTextToolsSettings() {
@@ -397,41 +396,49 @@ function runAutoTextTools(force = false) {
 function scheduleAutoTitleTranslation(force = false) {
     const titleFaInput = document.getElementById("letter-title-fa-input");
     const titleEnInput = document.getElementById("letter-title-en-input");
-
     if (!titleFaInput || !titleEnInput || !autoTranslateTitleEnabled) {
         return;
     }
 
-    if (!force && document.activeElement === titleEnInput) {
-        return;
-    }
-
-    const titleFa = String(titleFaInput.value || "").trim();
-    if (!titleFa) {
+    const sourceText = titleFaInput.value.trim();
+    if (!sourceText) {
         titleEnInput.value = "";
         return;
     }
 
-    if (autoTitleTranslateTimer) {
-        clearTimeout(autoTitleTranslateTimer);
-        autoTitleTranslateTimer = null;
+    if (titleTranslateTimer) {
+        clearTimeout(titleTranslateTimer);
+        titleTranslateTimer = null;
     }
 
-    const requestId = ++autoTitleRequestCounter;
-    autoTitleTranslateTimer = setTimeout(async () => {
-        const translated = await translatePersianTitleToEnglish(titleFa);
-        if (requestId !== autoTitleRequestCounter) {
+    const startTranslation = async () => {
+        const requestId = ++titleTranslateRequestId;
+        const translated = await translatePersianTitleToEnglish(sourceText);
+
+        if (requestId !== titleTranslateRequestId) {
             return;
         }
-
+        if (!autoTranslateTitleEnabled) {
+            return;
+        }
         if (!force && document.activeElement === titleEnInput) {
             return;
         }
-
-        if (translated) {
-            titleEnInput.value = translated;
+        if (titleFaInput.value.trim() !== sourceText) {
+            return;
         }
-    }, force ? 0 : 300);
+
+        titleEnInput.value = translated;
+    };
+
+    if (force) {
+        void startTranslation();
+        return;
+    }
+
+    titleTranslateTimer = setTimeout(() => {
+        void startTranslation();
+    }, TITLE_TRANSLATE_DEBOUNCE_MS);
 }
 
 function normalizeImageValue(rawValue) {
