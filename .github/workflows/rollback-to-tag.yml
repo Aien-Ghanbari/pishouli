@@ -1,0 +1,59 @@
+name: Rollback To Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to roll back to, for example v2026.04.04.4
+        required: true
+      target_branch:
+        description: Branch to receive the rollback pull request
+        required: true
+        default: main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag and prepare branch name
+        id: prep
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          TARGET_BRANCH="${{ github.event.inputs.target_branch }}"
+
+          git fetch --tags --force
+          if ! git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag not found: $TAG"
+            exit 1
+          fi
+
+          SAFE_TAG=$(echo "$TAG" | tr -cd '[:alnum:]._-')
+          ROLLBACK_BRANCH="rollback/${SAFE_TAG}-${GITHUB_RUN_NUMBER}"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "rollback_branch=$ROLLBACK_BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create rollback branch from tag
+        run: |
+          git checkout -b "${{ steps.prep.outputs.rollback_branch }}" "refs/tags/${{ steps.prep.outputs.tag }}"
+          git push origin "${{ steps.prep.outputs.rollback_branch }}"
+
+      - name: Open rollback pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base "${{ steps.prep.outputs.target }}" \
+            --head "${{ steps.prep.outputs.rollback_branch }}" \
+            --title "Rollback to ${{ steps.prep.outputs.tag }}" \
+            --body "This PR was created automatically by the Rollback To Tag workflow.\n\n- Source tag: ${{ steps.prep.outputs.tag }}\n- Target branch: ${{ steps.prep.outputs.target }}\n\nMerge this PR to roll back safely."

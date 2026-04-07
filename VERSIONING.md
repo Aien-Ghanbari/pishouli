@@ -20,18 +20,27 @@ Workflow file:
 
 ## Roll back to an older version
 
-Use an existing tag and redeploy that commit to main:
+Use the GitHub workflow to create a rollback pull request from a tag.
 
-```powershell
-git fetch --tags
-git checkout v2026.04.04.4
-git checkout -b rollback/v2026.04.04.4
-git push origin rollback/v2026.04.04.4
-```
+Workflow file:
+- .github/workflows/rollback-to-tag.yml
 
-Then either:
-- open a pull request from rollback branch to main, or
-- reset main to that tag locally and push (only if you intentionally want hard rollback).
+From GitHub UI:
+
+1. Open Actions.
+2. Choose Rollback To Tag.
+3. Click Run workflow.
+4. Enter tag, for example v2026.04.04.4.
+5. Keep target branch as main.
+6. Run workflow.
+
+The workflow will:
+
+- validate the tag exists,
+- create a branch from that tag,
+- open a pull request to main.
+
+Merge that pull request to complete rollback safely.
 
 ## Notes
 
