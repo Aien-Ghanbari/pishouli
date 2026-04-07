@@ -1170,6 +1170,16 @@ body.admin-mode {
     line-height: 1.5;
 }
 
+.admin-auto-tools {
+    margin: 4px 0 12px;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.64);
+    border: 1px solid rgba(191, 132, 155, 0.32);
+    display: grid;
+    gap: 8px;
+}
+
 #letter-form label,
 #sync-form label {
     display: block;

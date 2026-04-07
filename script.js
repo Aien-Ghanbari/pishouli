@@ -142,6 +142,8 @@ const ACTIVE_VISIT_ID_KEY = "activeVisitId";
 const REMOTE_VISIT_ID_KEY = "remoteVisitId";
 const VISITOR_ID_KEY = "visitorId";
 const REMOTE_SYNC_CONFIG_KEY = "remoteSyncConfig";
+const AUTO_TRANSLATE_TITLE_KEY = "autoTranslateTitleEnabled";
+const AUTO_FINGLISH_BODY_KEY = "autoFinglishBodyEnabled";
 // Keep this private between you two. Admin mode opens only when URL has admin=1 and this key.
 const ADMIN_ACCESS_TOKEN = "spring-cat-2026";
 const MEOW_SOUND_FILES = [
@@ -167,6 +169,94 @@ const remoteSync = {
     lastVisits: []
 };
 
+let autoTranslateTitleEnabled = false;
+let autoFinglishBodyEnabled = false;
+
+const TITLE_WORD_TRANSLATIONS = {
+    "سلام": "hello",
+    "عشق": "love",
+    "عزیزم": "my darling",
+    "دوستت": "love you",
+    "دوستت دارم": "I love you",
+    "دوست": "friend",
+    "قشنگ": "beautiful",
+    "قشنگم": "my beautiful",
+    "خوبی": "are you okay",
+    "خوب": "good",
+    "غمگین": "sad",
+    "خنده": "laugh",
+    "امید": "hope",
+    "شیطون": "naughty",
+    "روز": "day",
+    "شب": "night",
+    "صبح": "morning",
+    "عصر": "evening",
+    "نامه": "letter",
+    "خاطره": "memory",
+    "دلتنگ": "miss you",
+    "بغل": "hug",
+    "می بوسمت": "kiss you",
+    "بوس": "kiss"
+};
+
+const FINGLISH_CHAR_MAP = {
+    "ا": "a",
+    "آ": "aa",
+    "أ": "a",
+    "إ": "e",
+    "ء": "",
+    "ئ": "i",
+    "ؤ": "o",
+    "ب": "b",
+    "پ": "p",
+    "ت": "t",
+    "ث": "s",
+    "ج": "j",
+    "چ": "ch",
+    "ح": "h",
+    "خ": "kh",
+    "د": "d",
+    "ذ": "z",
+    "ر": "r",
+    "ز": "z",
+    "ژ": "zh",
+    "س": "s",
+    "ش": "sh",
+    "ص": "s",
+    "ض": "z",
+    "ط": "t",
+    "ظ": "z",
+    "ع": "",
+    "غ": "gh",
+    "ف": "f",
+    "ق": "gh",
+    "ک": "k",
+    "ك": "k",
+    "گ": "g",
+    "ل": "l",
+    "م": "m",
+    "ن": "n",
+    "و": "v",
+    "ه": "h",
+    "ة": "h",
+    "ی": "i",
+    "ي": "i",
+    "ى": "a",
+    " " : " ",
+    "\n": "\n",
+    "\t": "\t",
+    "۰": "0",
+    "۱": "1",
+    "۲": "2",
+    "۳": "3",
+    "۴": "4",
+    "۵": "5",
+    "۶": "6",
+    "۷": "7",
+    "۸": "8",
+    "۹": "9"
+};
+
 const catSpriteConfig = {
     cols: 6,
     rows: 6,
@@ -187,6 +277,83 @@ const catSpriteConfig = {
 
 function deepClone(value) {
     return JSON.parse(JSON.stringify(value));
+}
+
+function toTitleCase(value) {
+    return String(value || "")
+        .split(" ")
+        .filter(Boolean)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+}
+
+function transliteratePersianToFinglish(value) {
+    let result = "";
+    const text = String(value || "");
+
+    for (const char of text) {
+        if (Object.prototype.hasOwnProperty.call(FINGLISH_CHAR_MAP, char)) {
+            result += FINGLISH_CHAR_MAP[char];
+            continue;
+        }
+
+        result += char;
+    }
+
+    // Keep a strict transliteration style: no helper "e" insertion between consonants.
+    return result.replace(/\s+/g, " ").trim();
+}
+
+function translatePersianTitleToEnglish(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+        return "";
+    }
+
+    const exact = TITLE_WORD_TRANSLATIONS[raw];
+    if (exact) {
+        return toTitleCase(exact);
+    }
+
+    const tokens = raw.split(/\s+/).filter(Boolean);
+    const translated = tokens.map((token) => {
+        const translatedWord = TITLE_WORD_TRANSLATIONS[token];
+        if (translatedWord) {
+            return translatedWord;
+        }
+        return transliteratePersianToFinglish(token);
+    }).join(" ");
+
+    return toTitleCase(translated);
+}
+
+function loadAutoTextToolsSettings() {
+    autoTranslateTitleEnabled = localStorage.getItem(AUTO_TRANSLATE_TITLE_KEY) === "1";
+    autoFinglishBodyEnabled = localStorage.getItem(AUTO_FINGLISH_BODY_KEY) === "1";
+}
+
+function saveAutoTextToolsSettings() {
+    localStorage.setItem(AUTO_TRANSLATE_TITLE_KEY, autoTranslateTitleEnabled ? "1" : "0");
+    localStorage.setItem(AUTO_FINGLISH_BODY_KEY, autoFinglishBodyEnabled ? "1" : "0");
+}
+
+function runAutoTextTools(force = false) {
+    const titleFaInput = document.getElementById("letter-title-fa-input");
+    const bodyFaInput = document.getElementById("letter-body-fa-input");
+    const titleEnInput = document.getElementById("letter-title-en-input");
+    const bodyEnInput = document.getElementById("letter-body-en-input");
+
+    if (!titleFaInput || !bodyFaInput || !titleEnInput || !bodyEnInput) {
+        return;
+    }
+
+    if (autoTranslateTitleEnabled && (force || document.activeElement !== titleEnInput)) {
+        titleEnInput.value = translatePersianTitleToEnglish(titleFaInput.value);
+    }
+
+    if (autoFinglishBodyEnabled && (force || document.activeElement !== bodyEnInput)) {
+        bodyEnInput.value = transliteratePersianToFinglish(bodyFaInput.value);
+    }
 }
 
 function normalizeImageValue(rawValue) {
@@ -2053,8 +2220,43 @@ function initAdminMode() {
     const disconnectSyncBtn = document.getElementById("disconnect-sync-btn");
     const shareSetupBtn = document.getElementById("share-setup-btn");
     const displayLangSelect = document.getElementById("admin-display-lang");
+    const autoTranslateTitleToggle = document.getElementById("auto-translate-title-toggle");
+    const autoFinglishBodyToggle = document.getElementById("auto-finglish-body-toggle");
+    const titleFaInput = document.getElementById("letter-title-fa-input");
+    const bodyFaInput = document.getElementById("letter-body-fa-input");
 
     bindImageFormControls();
+    loadAutoTextToolsSettings();
+
+    if (autoTranslateTitleToggle) {
+        autoTranslateTitleToggle.checked = autoTranslateTitleEnabled;
+        autoTranslateTitleToggle.addEventListener("change", () => {
+            autoTranslateTitleEnabled = autoTranslateTitleToggle.checked;
+            saveAutoTextToolsSettings();
+            runAutoTextTools(true);
+        });
+    }
+
+    if (autoFinglishBodyToggle) {
+        autoFinglishBodyToggle.checked = autoFinglishBodyEnabled;
+        autoFinglishBodyToggle.addEventListener("change", () => {
+            autoFinglishBodyEnabled = autoFinglishBodyToggle.checked;
+            saveAutoTextToolsSettings();
+            runAutoTextTools(true);
+        });
+    }
+
+    if (titleFaInput) {
+        titleFaInput.addEventListener("input", () => {
+            runAutoTextTools();
+        });
+    }
+
+    if (bodyFaInput) {
+        bodyFaInput.addEventListener("input", () => {
+            runAutoTextTools();
+        });
+    }
 
     if (displayLangSelect) {
         displayLangSelect.value = currentLang;
@@ -2174,6 +2376,7 @@ function initAdminMode() {
                     imageUrlInput.value = imageValue;
                 }
                 setImagePreview(imageValue);
+                runAutoTextTools(true);
                 const saveBtn = document.getElementById("save-letter-btn");
                 if (saveBtn) {
                     saveBtn.textContent = "Update Letter";
