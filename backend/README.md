@@ -67,6 +67,12 @@ If you already deployed an older version before visibility toggles, also run:
 wrangler d1 execute pishouli-db --remote --file=./migrations/0002_add_letter_visibility.sql
 ```
 
+If you are upgrading to the version with letter images, also run:
+
+```bash
+wrangler d1 execute pishouli-db --remote --file=./migrations/0003_add_letter_image.sql
+```
+
 6. Set bootstrap secret
 
 ```bash

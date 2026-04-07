@@ -75,6 +75,7 @@
         <div class="modal-content">
             <button id="close-letter-btn" class="close-btn" type="button" aria-label="Close letter">&times;</button>
             <h2 id="letter-title"></h2>
+            <img id="letter-image" class="letter-image is-hidden" alt="Letter image">
             <div id="empty-illustration" class="is-hidden" aria-hidden="true"></div>
             <p id="letter-body"></p>
         </div>
@@ -123,6 +124,18 @@
                     <label>English Body
                         <textarea id="letter-body-en-input" required rows="5" maxlength="5000"></textarea>
                     </label>
+                </div>
+                <div class="admin-grid-2">
+                    <label>Image URL (optional)
+                        <input type="url" id="letter-image-url-input" placeholder="https://example.com/image.jpg">
+                    </label>
+                    <label>Attach Image File (optional)
+                        <input type="file" id="letter-image-file-input" accept="image/*">
+                    </label>
+                </div>
+                <div class="admin-image-preview-wrap">
+                    <img id="letter-image-preview" class="admin-image-preview is-hidden" alt="Selected letter image preview">
+                    <button type="button" id="clear-letter-image-btn" class="secondary">Remove Image</button>
                 </div>
                 <div class="admin-actions-row">
                     <button type="submit" id="save-letter-btn">Save Letter</button>

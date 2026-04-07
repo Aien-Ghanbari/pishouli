@@ -151,6 +151,9 @@ const MEOW_SOUND_FILES = [
     "./assets/sounds/meow4.mp3",
     "./assets/sounds/meow5.mp3"
 ];
+const MAX_IMAGE_DIMENSION = 1280;
+const IMAGE_JPEG_QUALITY = 0.82;
+const MAX_IMAGE_DATA_URL_LENGTH = 2_000_000;
 
 const remoteSync = {
     connected: false,
@@ -186,6 +189,22 @@ function deepClone(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
+function normalizeImageValue(rawValue) {
+    const value = String(rawValue || "").trim();
+    if (!value) {
+        return "";
+    }
+
+    const isDataImage = /^data:image\//i.test(value);
+    const isHttpImage = /^https?:\/\//i.test(value);
+
+    if (!isDataImage && !isHttpImage) {
+        return "";
+    }
+
+    return value.slice(0, MAX_IMAGE_DATA_URL_LENGTH);
+}
+
 function normalizeMessagesShape(payload) {
     const normalized = deepClone(DEFAULT_MESSAGES);
     if (!payload || typeof payload !== "object") {
@@ -208,7 +227,8 @@ function normalizeMessagesShape(payload) {
                 .map((item) => ({
                     id: String(item.id || `${category}_${Date.now()}_${Math.floor(Math.random() * 1000)}`),
                     title: String(item.title || ""),
-                    body: String(item.body || "")
+                    body: String(item.body || ""),
+                    image: normalizeImageValue(item.image)
                 }))
                 .filter((item) => item.title.trim().length > 0 && item.body.trim().length > 0);
         });
@@ -419,12 +439,14 @@ function convertBackendLettersToMessages(rows) {
         normalized.fa[mood].push({
             id,
             title: String(row.title_fa || ""),
-            body: String(row.body_fa || "")
+            body: String(row.body_fa || ""),
+            image: normalizeImageValue(row.image_url)
         });
         normalized.en[mood].push({
             id,
             title: String(row.title_en || ""),
-            body: String(row.body_en || "")
+            body: String(row.body_en || ""),
+            image: normalizeImageValue(row.image_url)
         });
     });
 
@@ -450,6 +472,7 @@ function convertMessagesToBackendLetters(payload) {
                 bodyFa: item.body || "",
                 titleEn: "",
                 bodyEn: "",
+                imageUrl: normalizeImageValue(item.image),
                 isVisible: isLetterVisible(item.id)
             });
         });
@@ -462,10 +485,12 @@ function convertMessagesToBackendLetters(payload) {
                 bodyFa: "",
                 titleEn: "",
                 bodyEn: "",
+                imageUrl: "",
                 isVisible: isLetterVisible(item.id)
             };
             existing.titleEn = item.title || "";
             existing.bodyEn = item.body || "";
+            existing.imageUrl = normalizeImageValue(existing.imageUrl || item.image);
             map.set(item.id, existing);
         });
 
@@ -1312,6 +1337,7 @@ function showLetterModal(category) {
     const modalContent = modal.querySelector(".modal-content");
     const title = document.getElementById("letter-title");
     const body = document.getElementById("letter-body");
+    const image = document.getElementById("letter-image");
     const emptyIllustration = document.getElementById("empty-illustration");
 
     const allCategoryLetters = messages[currentLang][category] || [];
@@ -1345,6 +1371,16 @@ function showLetterModal(category) {
         });
         title.innerText = currentLetter.title;
         body.innerText = currentLetter.body;
+        const imageSrc = normalizeImageValue(currentLetter.image);
+        if (image) {
+            if (imageSrc) {
+                image.src = imageSrc;
+                image.classList.remove("is-hidden");
+            } else {
+                image.removeAttribute("src");
+                image.classList.add("is-hidden");
+            }
+        }
         body.classList.add("has-letter");
         body.classList.remove("is-empty-copy");
 
@@ -1354,6 +1390,10 @@ function showLetterModal(category) {
     } else {
         title.innerText = getTranslation("emptyTitle");
         body.innerText = getTranslation(getMoodEmptyKey(category));
+        if (image) {
+            image.removeAttribute("src");
+            image.classList.add("is-hidden");
+        }
         body.classList.remove("has-letter");
         body.classList.add("is-empty-copy");
     }
@@ -1407,11 +1447,16 @@ function closeLetter() {
     const modal = document.getElementById("modal");
     const modalContent = modal.querySelector(".modal-content");
     const body = document.getElementById("letter-body");
+    const image = document.getElementById("letter-image");
     const emptyIllustration = document.getElementById("empty-illustration");
     modal.classList.add("hidden");
     modalContent.classList.remove("theme-laugh", "theme-sad", "theme-hope", "theme-period", "theme-naughty", "theme-empty", "is-empty");
     modalContent.removeAttribute("data-mood");
     body.classList.remove("has-letter", "is-empty-copy");
+    if (image) {
+        image.removeAttribute("src");
+        image.classList.add("is-hidden");
+    }
     if (emptyIllustration) {
         emptyIllustration.classList.add("is-hidden");
     }
@@ -1682,6 +1727,7 @@ function renderAdminLetters() {
             const visibilityText = visible ? "visible" : "hidden";
             const visibilityIcon = visible ? "👁" : "🚫";
             const visibilityTitle = visible ? "Hide letter" : "Show letter";
+            const hasImage = normalizeImageValue((record.fa && record.fa.image) || (record.en && record.en.image));
             const title = displayLang === "fa"
                 ? ((record.fa && record.fa.title) || (record.en && record.en.title) || "بدون عنوان")
                 : ((record.en && record.en.title) || (record.fa && record.fa.title) || "Untitled");
@@ -1691,6 +1737,7 @@ function renderAdminLetters() {
                     <div class="admin-item-main">
                         <small class="admin-read-flag ${flagClass}">${flagText}</small>
                         <small class="admin-visibility-flag ${visibilityClass}">${visibilityText}</small>
+                        ${hasImage ? '<small class="admin-item-has-image">has image</small>' : ""}
                         <strong>${escapeHtml(title)}</strong>
                         <small>ID: ${escapeHtml(record.id)}</small>
                     </div>
@@ -1823,6 +1870,131 @@ function refreshAdminView() {
     renderRecentVisits();
 }
 
+function getImageFormElements() {
+    return {
+        imageUrlInput: document.getElementById("letter-image-url-input"),
+        imageFileInput: document.getElementById("letter-image-file-input"),
+        imagePreview: document.getElementById("letter-image-preview"),
+        clearImageBtn: document.getElementById("clear-letter-image-btn")
+    };
+}
+
+function setImagePreview(src) {
+    const { imagePreview } = getImageFormElements();
+    if (!imagePreview) {
+        return;
+    }
+
+    const normalized = normalizeImageValue(src);
+    if (normalized) {
+        imagePreview.src = normalized;
+        imagePreview.classList.remove("is-hidden");
+        return;
+    }
+
+    imagePreview.removeAttribute("src");
+    imagePreview.classList.add("is-hidden");
+}
+
+function clearImageInputs() {
+    const { imageUrlInput, imageFileInput } = getImageFormElements();
+    if (imageUrlInput) {
+        imageUrlInput.value = "";
+    }
+    if (imageFileInput) {
+        imageFileInput.value = "";
+    }
+    setImagePreview("");
+}
+
+async function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read image file."));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function shrinkImageDataUrl(dataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(img.width, img.height));
+            const width = Math.max(1, Math.round(img.width * scale));
+            const height = Math.max(1, Math.round(img.height * scale));
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                resolve(dataUrl);
+                return;
+            }
+
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY);
+            resolve(compressed || dataUrl);
+        };
+
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+
+function bindImageFormControls() {
+    const { imageUrlInput, imageFileInput, clearImageBtn } = getImageFormElements();
+
+    if (imageUrlInput) {
+        imageUrlInput.addEventListener("input", () => {
+            setImagePreview(imageUrlInput.value);
+        });
+    }
+
+    if (imageFileInput) {
+        imageFileInput.addEventListener("change", async () => {
+            const file = imageFileInput.files && imageFileInput.files[0];
+            if (!file) {
+                return;
+            }
+
+            if (!String(file.type || "").startsWith("image/")) {
+                alert("Please choose an image file.");
+                imageFileInput.value = "";
+                return;
+            }
+
+            try {
+                const rawDataUrl = await fileToDataUrl(file);
+                const compressedDataUrl = await shrinkImageDataUrl(rawDataUrl);
+                const normalized = normalizeImageValue(compressedDataUrl);
+                if (!normalized) {
+                    throw new Error("Invalid image format.");
+                }
+                if (normalized.length > MAX_IMAGE_DATA_URL_LENGTH) {
+                    throw new Error("Image is too large. Please use a smaller image.");
+                }
+
+                if (imageUrlInput) {
+                    imageUrlInput.value = normalized;
+                }
+                setImagePreview(normalized);
+            } catch (error) {
+                alert(error.message || "Failed to process image.");
+                imageFileInput.value = "";
+            }
+        });
+    }
+
+    if (clearImageBtn) {
+        clearImageBtn.addEventListener("click", () => {
+            clearImageInputs();
+        });
+    }
+}
+
 function resetLetterForm() {
     const form = document.getElementById("letter-form");
     const editId = document.getElementById("letter-edit-id");
@@ -1837,6 +2009,8 @@ function resetLetterForm() {
     if (saveBtn) {
         saveBtn.textContent = "Save Letter";
     }
+
+    clearImageInputs();
 }
 
 function initAdminMode() {
@@ -1880,6 +2054,8 @@ function initAdminMode() {
     const shareSetupBtn = document.getElementById("share-setup-btn");
     const displayLangSelect = document.getElementById("admin-display-lang");
 
+    bindImageFormControls();
+
     if (displayLangSelect) {
         displayLangSelect.value = currentLang;
         displayLangSelect.addEventListener("change", renderAdminLetters);
@@ -1904,12 +2080,14 @@ function initAdminMode() {
             const bodyFaInput = document.getElementById("letter-body-fa-input");
             const titleEnInput = document.getElementById("letter-title-en-input");
             const bodyEnInput = document.getElementById("letter-body-en-input");
+            const imageUrlInput = document.getElementById("letter-image-url-input");
 
             const category = categoryInput.value;
             const titleFa = titleFaInput.value.trim();
             const bodyFa = bodyFaInput.value.trim();
             const titleEn = titleEnInput.value.trim();
             const bodyEn = bodyEnInput.value.trim();
+            const image = normalizeImageValue(imageUrlInput ? imageUrlInput.value : "");
 
             if (!titleFa || !bodyFa || !titleEn || !bodyEn) {
                 return;
@@ -1928,8 +2106,8 @@ function initAdminMode() {
                 });
             });
 
-            messages.fa[category].push({ id: letterId, title: titleFa, body: bodyFa });
-            messages.en[category].push({ id: letterId, title: titleEn, body: bodyEn });
+            messages.fa[category].push({ id: letterId, title: titleFa, body: bodyFa, image });
+            messages.en[category].push({ id: letterId, title: titleEn, body: bodyEn, image });
 
             setLetterVisibility(letterId, true);
 
@@ -1990,6 +2168,12 @@ function initAdminMode() {
                 document.getElementById("letter-body-fa-input").value = pair.fa ? pair.fa.body : "";
                 document.getElementById("letter-title-en-input").value = pair.en ? pair.en.title : "";
                 document.getElementById("letter-body-en-input").value = pair.en ? pair.en.body : "";
+                const imageValue = normalizeImageValue((pair.fa && pair.fa.image) || (pair.en && pair.en.image));
+                const imageUrlInput = document.getElementById("letter-image-url-input");
+                if (imageUrlInput) {
+                    imageUrlInput.value = imageValue;
+                }
+                setImagePreview(imageValue);
                 const saveBtn = document.getElementById("save-letter-btn");
                 if (saveBtn) {
                     saveBtn.textContent = "Update Letter";
