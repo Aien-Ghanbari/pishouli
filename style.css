@@ -692,7 +692,7 @@ header p {
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
 }
 
-.letter-image-wrap.is-hidden {
+.letter-image.is-hidden {
     display: none;
 }
 
@@ -1252,10 +1252,14 @@ body.admin-mode {
     box-shadow: 0 6px 14px rgba(70, 40, 52, 0.12);
 }
 
+.admin-image-preview.is-hidden {
+    display: none;
+}
+
 .admin-image-preview.is-placeholder {
     object-fit: contain;
+    background: rgba(255, 255, 255, 0.86);
     padding: 8px;
-    background: #fff;
 }
 
 .admin-item-has-image {
