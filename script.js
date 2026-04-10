@@ -2,7 +2,7 @@ const translations = {
     fa: {
         pageTitle: "پیشولی",
         introCaption: "داستان کوچولوی ما شروع می‌شه...",
-        enterNow: "ورود",   
+        enterNow: "ورود",       
         vaultTitle: "صندوقچه بهاری ما",
         vaultSubtitle: "نامه های حال خوب اینجاست...",
         vaultSubtitleSingle: "هر نامه فقط یک بار خوانده می شود...",
@@ -1704,6 +1704,16 @@ function openLetter(category, envelopeElement) {
     });
     touchVisitVault(category);
 
+    if (envelopeElement) {
+        const rect = envelopeElement.getBoundingClientRect();
+        window.dispatchEvent(new CustomEvent("cat:interest", {
+            detail: {
+                x: rect.left + (rect.width / 2),
+                y: rect.top + (rect.height / 2)
+            }
+        }));
+    }
+
     isOpeningLetter = true;
 
     if (envelopeElement) {
@@ -2580,22 +2590,36 @@ function initAdminMode() {
 // --- Cat AI Logic ---
 function startCatAI() {
     const cat = document.getElementById("pixel-cat");
-    let currentX = window.innerWidth * 0.1; // Start near the left
-    let currentY = window.innerHeight - 80; // Start near the bottom
+    let currentX = window.innerWidth * 0.1;
+    let currentY = window.innerHeight - 80;
 
     let frameWidth = 32;
     let frameHeight = 32;
-    let activeState = "idle";
     let stateTimer = null;
+    let behaviorTimer = null;
     let currentFrame = catSpriteConfig.states.idle.start;
-    const behaviorStates = ["idle", "walk", "run", "jump"];
+    let pendingInterestTarget = null;
     const movementSpeeds = {
-        walk: 55,
-        run: 95,
-        jump: 80
+        walk: 60,
+        run: 102,
+        jump: 86
     };
 
     cat.style.display = "block";
+
+    function clampPosition(x, y) {
+        const clampedX = Math.max(12, Math.min(x, window.innerWidth - frameWidth - 12));
+        const clampedY = Math.max(window.innerHeight * 0.38, Math.min(y, window.innerHeight - frameHeight - 10));
+        return { x: clampedX, y: clampedY };
+    }
+
+    function scheduleBehavior(fn, delay) {
+        if (behaviorTimer) {
+            clearTimeout(behaviorTimer);
+            behaviorTimer = null;
+        }
+        behaviorTimer = setTimeout(fn, delay);
+    }
 
     function applyFrame(frameIndex) {
         const clampedFrame = Math.max(0, Math.min(frameIndex, catSpriteConfig.totalFrames - 1));
@@ -2615,7 +2639,6 @@ function startCatAI() {
             stateTimer = null;
         }
 
-        activeState = stateName;
         currentFrame = state.start;
         applyFrame(currentFrame);
 
@@ -2638,6 +2661,75 @@ function startCatAI() {
         cat.style.width = `${frameWidth}px`;
         cat.style.height = `${frameHeight}px`;
         cat.style.backgroundSize = `${frameWidth * catSpriteConfig.cols}px ${frameHeight * catSpriteConfig.rows}px`;
+        const clamped = clampPosition(currentX, currentY);
+        currentX = clamped.x;
+        currentY = clamped.y;
+        cat.style.left = `${currentX}px`;
+        cat.style.top = `${currentY}px`;
+    }
+
+    function chooseTravelState() {
+        const roll = Math.random();
+        if (roll < 0.58) {
+            return "walk";
+        }
+        if (roll < 0.9) {
+            return "run";
+        }
+        return "jump";
+    }
+
+    function getEnvelopeTarget() {
+        const envelopes = Array.from(document.querySelectorAll(".envelope"));
+        if (!envelopes.length) {
+            return null;
+        }
+
+        const target = envelopes[Math.floor(Math.random() * envelopes.length)];
+        const rect = target.getBoundingClientRect();
+        const jitterX = (Math.random() * 60) - 30;
+        const jitterY = (Math.random() * 40) - 20;
+        return clampPosition(
+            rect.left + (rect.width / 2) - (frameWidth / 2) + jitterX,
+            rect.top + (rect.height / 2) - (frameHeight / 2) + jitterY
+        );
+    }
+
+    function getWanderTarget() {
+        const targetX = Math.random() * Math.max(120, window.innerWidth - frameWidth - 20);
+        const targetY = (Math.random() * (window.innerHeight / 2)) + (window.innerHeight / 2) - frameHeight;
+        return clampPosition(targetX, targetY);
+    }
+
+    function pickNextTarget() {
+        if (pendingInterestTarget) {
+            const target = pendingInterestTarget;
+            pendingInterestTarget = null;
+            return target;
+        }
+
+        if (Math.random() < 0.34) {
+            const envelopeTarget = getEnvelopeTarget();
+            if (envelopeTarget) {
+                return envelopeTarget;
+            }
+        }
+
+        return getWanderTarget();
+    }
+
+    function afterArrival() {
+        if (!cat.classList.contains("cat-fallback")) {
+            playState("idle");
+        }
+
+        if (Math.random() < 0.28) {
+            const direction = Math.random() < 0.5 ? -1 : 1;
+            cat.style.transform = `scaleX(${direction})`;
+        }
+
+        const idleTime = 900 + (Math.random() * 2600);
+        scheduleBehavior(moveCat, idleTime);
     }
 
     function trySpriteSource(index) {
@@ -2668,34 +2760,26 @@ function startCatAI() {
     trySpriteSource(0);
 
     function moveCat() {
-        // 1. Pick the next behavior with equal probability.
-        const nextState = behaviorStates[Math.floor(Math.random() * behaviorStates.length)];
-
-        // If idle is selected, stay put for a short random pause.
-        if (nextState === "idle") {
+        if (Math.random() < 0.18 && !pendingInterestTarget) {
             if (!cat.classList.contains("cat-fallback")) {
                 playState("idle");
             }
-
-            const idleTime = (Math.random() * 3000) + 1500;
-            setTimeout(moveCat, idleTime);
+            scheduleBehavior(moveCat, 1300 + Math.random() * 2200);
             return;
         }
 
-        // 2. Pick a random destination
-        const targetX = Math.random() * Math.max(120, window.innerWidth - frameWidth - 20);
-        const targetY = (Math.random() * (window.innerHeight / 2)) + (window.innerHeight / 2) - frameHeight; // Keep it in the lower half of the screen
+        const target = pickNextTarget();
+        const targetX = target.x;
+        const targetY = target.y;
 
-        // 3. Determine direction to flip the sprite (ScaleX: 1 is normal, -1 is flipped)
         const direction = targetX > currentX ? 1 : -1;
         cat.style.transform = `scaleX(${direction})`;
 
-        // 4. Calculate distance and speed
         const distance = Math.hypot(targetX - currentX, targetY - currentY);
+        const nextState = chooseTravelState();
         const speed = movementSpeeds[nextState] || movementSpeeds.walk; // Pixels per second
-        const duration = distance / speed;
+        const duration = Math.max(0.4, distance / speed);
 
-        // 5. Animate the movement
         cat.style.transition = `left ${duration}s linear, top ${duration}s linear`;
         cat.style.left = `${targetX}px`;
         cat.style.top = `${targetY}px`;
@@ -2704,21 +2788,38 @@ function startCatAI() {
             playState(nextState);
         }
 
-        // 6. When it reaches the destination, stop and wait
-        setTimeout(() => {
+        if (Math.random() < 0.16) {
+            playCatMeow();
+        }
+
+        scheduleBehavior(() => {
             currentX = targetX;
             currentY = targetY;
-
-            if (!cat.classList.contains("cat-fallback")) {
-                playState("idle");
-            }
-            
-            // Wait a random amount of time before choosing the next state.
-            const idleTime = (Math.random() * 4000) + 2000;
-            setTimeout(moveCat, idleTime);
-            
+            afterArrival();
         }, duration * 1000);
     }
+
+    window.addEventListener("resize", () => {
+        const clamped = clampPosition(currentX, currentY);
+        currentX = clamped.x;
+        currentY = clamped.y;
+        cat.style.left = `${currentX}px`;
+        cat.style.top = `${currentY}px`;
+    });
+
+    window.addEventListener("cat:interest", (event) => {
+        const detail = event.detail || {};
+        if (typeof detail.x !== "number" || typeof detail.y !== "number") {
+            return;
+        }
+
+        pendingInterestTarget = clampPosition(
+            detail.x - (frameWidth / 2),
+            detail.y - (frameHeight / 2)
+        );
+
+        scheduleBehavior(moveCat, 120);
+    });
 }
 
 function finishIntro() {
