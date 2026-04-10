@@ -692,6 +692,10 @@ header p {
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
 }
 
+.letter-image-wrap.is-hidden {
+    display: none;
+}
+
 body.lang-fa #letter-body {
     line-height: 2.15;
 }
@@ -1246,6 +1250,12 @@ body.admin-mode {
     border-radius: 10px;
     border: 1px solid rgba(187, 121, 147, 0.45);
     box-shadow: 0 6px 14px rgba(70, 40, 52, 0.12);
+}
+
+.admin-image-preview.is-placeholder {
+    object-fit: contain;
+    padding: 8px;
+    background: #fff;
 }
 
 .admin-item-has-image {

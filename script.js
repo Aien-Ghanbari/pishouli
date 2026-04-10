@@ -2,7 +2,7 @@ const translations = {
     fa: {
         pageTitle: "پیشولی",
         introCaption: "داستان کوچولوی ما شروع می‌شه...",
-        enterNow: "ورود",
+        enterNow: "ورود",   
         vaultTitle: "صندوقچه بهاری ما",
         vaultSubtitle: "نامه های حال خوب اینجاست...",
         vaultSubtitleSingle: "هر نامه فقط یک بار خوانده می شود...",
@@ -157,6 +157,7 @@ const MEOW_SOUND_FILES = [
 const MAX_IMAGE_DIMENSION = 1280;
 const IMAGE_JPEG_QUALITY = 0.82;
 const MAX_IMAGE_DATA_URL_LENGTH = 2_000_000;
+const NO_IMAGE_PREVIEW_SRC = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='240' viewBox='0 0 320 240'><rect width='320' height='240' rx='18' fill='%23f6f2f4'/><rect x='24' y='24' width='272' height='192' rx='14' fill='%23ffffff' stroke='%23d6c8cf' stroke-width='4'/><path d='M78 168l42-44 34 34 48-56 40 66H78z' fill='%23e7dde2'/><circle cx='122' cy='94' r='14' fill='%23d9c9d1'/><text x='160' y='204' text-anchor='middle' font-size='19' font-family='Arial,sans-serif' fill='%23826c78'>No image selected</text></svg>";
 
 const remoteSync = {
     connected: false,
@@ -1613,6 +1614,7 @@ function showLetterModal(category) {
     const modalContent = modal.querySelector(".modal-content");
     const title = document.getElementById("letter-title");
     const body = document.getElementById("letter-body");
+    const imageWrap = document.getElementById("letter-image-wrap");
     const image = document.getElementById("letter-image");
     const emptyIllustration = document.getElementById("empty-illustration");
 
@@ -1651,10 +1653,14 @@ function showLetterModal(category) {
         if (image) {
             if (imageSrc) {
                 image.src = imageSrc;
-                image.classList.remove("is-hidden");
+                if (imageWrap) {
+                    imageWrap.classList.remove("is-hidden");
+                }
             } else {
                 image.removeAttribute("src");
-                image.classList.add("is-hidden");
+                if (imageWrap) {
+                    imageWrap.classList.add("is-hidden");
+                }
             }
         }
         body.classList.add("has-letter");
@@ -1668,7 +1674,9 @@ function showLetterModal(category) {
         body.innerText = getTranslation(getMoodEmptyKey(category));
         if (image) {
             image.removeAttribute("src");
-            image.classList.add("is-hidden");
+            if (imageWrap) {
+                imageWrap.classList.add("is-hidden");
+            }
         }
         body.classList.remove("has-letter");
         body.classList.add("is-empty-copy");
@@ -1723,6 +1731,7 @@ function closeLetter() {
     const modal = document.getElementById("modal");
     const modalContent = modal.querySelector(".modal-content");
     const body = document.getElementById("letter-body");
+    const imageWrap = document.getElementById("letter-image-wrap");
     const image = document.getElementById("letter-image");
     const emptyIllustration = document.getElementById("empty-illustration");
     modal.classList.add("hidden");
@@ -1731,7 +1740,9 @@ function closeLetter() {
     body.classList.remove("has-letter", "is-empty-copy");
     if (image) {
         image.removeAttribute("src");
-        image.classList.add("is-hidden");
+    }
+    if (imageWrap) {
+        imageWrap.classList.add("is-hidden");
     }
     if (emptyIllustration) {
         emptyIllustration.classList.add("is-hidden");
@@ -2164,12 +2175,13 @@ function setImagePreview(src) {
     const normalized = normalizeImageValue(src);
     if (normalized) {
         imagePreview.src = normalized;
-        imagePreview.classList.remove("is-hidden");
+        imagePreview.classList.remove("is-hidden", "is-placeholder");
         return;
     }
 
-    imagePreview.removeAttribute("src");
-    imagePreview.classList.add("is-hidden");
+    imagePreview.src = NO_IMAGE_PREVIEW_SRC;
+    imagePreview.classList.remove("is-hidden");
+    imagePreview.classList.add("is-placeholder");
 }
 
 function clearImageInputs() {
