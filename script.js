@@ -175,6 +175,8 @@ let autoTranslateTitleEnabled = false;
 let autoFinglishBodyEnabled = false;
 let titleTranslateTimer = null;
 let titleTranslateRequestId = 0;
+let lastAutoFinglishBodyValue = "";
+let hasManualBodyEnOverride = false;
 
 const TITLE_WORD_TRANSLATIONS = {
     "سلام": "hello",
@@ -414,8 +416,45 @@ function runAutoTextTools(force = false) {
     }
 
     if (autoFinglishBodyEnabled && (force || document.activeElement !== bodyEnInput)) {
-        bodyEnInput.value = transliteratePersianToFinglish(bodyFaInput.value);
+        applyAutoFinglishBodyIfAllowed(force);
     }
+}
+
+function refreshBodyEnOverrideState() {
+    const bodyFaInput = document.getElementById("letter-body-fa-input");
+    const bodyEnInput = document.getElementById("letter-body-en-input");
+    if (!bodyFaInput || !bodyEnInput) {
+        return;
+    }
+
+    const expectedAuto = transliteratePersianToFinglish(bodyFaInput.value);
+    lastAutoFinglishBodyValue = expectedAuto;
+
+    const current = bodyEnInput.value || "";
+    hasManualBodyEnOverride = current.trim().length > 0 && current !== expectedAuto;
+}
+
+function applyAutoFinglishBodyIfAllowed(force = false) {
+    const bodyFaInput = document.getElementById("letter-body-fa-input");
+    const bodyEnInput = document.getElementById("letter-body-en-input");
+    if (!bodyFaInput || !bodyEnInput) {
+        return;
+    }
+
+    const autoValue = transliteratePersianToFinglish(bodyFaInput.value);
+    const currentValue = bodyEnInput.value || "";
+
+    const canOverwrite = force
+        ? (!hasManualBodyEnOverride || currentValue === lastAutoFinglishBodyValue || currentValue.trim() === "")
+        : (!hasManualBodyEnOverride || currentValue === lastAutoFinglishBodyValue || currentValue.trim() === "");
+
+    if (!canOverwrite) {
+        return;
+    }
+
+    bodyEnInput.value = autoValue;
+    lastAutoFinglishBodyValue = autoValue;
+    hasManualBodyEnOverride = false;
 }
 
 function scheduleAutoTitleTranslation(force = false) {
@@ -2299,6 +2338,9 @@ function resetLetterForm() {
         saveBtn.textContent = "Save Letter";
     }
 
+    hasManualBodyEnOverride = false;
+    lastAutoFinglishBodyValue = "";
+
     clearImageInputs();
 }
 
@@ -2346,6 +2388,7 @@ function initAdminMode() {
     const autoFinglishBodyToggle = document.getElementById("auto-finglish-body-toggle");
     const titleFaInput = document.getElementById("letter-title-fa-input");
     const bodyFaInput = document.getElementById("letter-body-fa-input");
+    const bodyEnInput = document.getElementById("letter-body-en-input");
 
     bindImageFormControls();
     loadAutoTextToolsSettings();
@@ -2377,6 +2420,13 @@ function initAdminMode() {
     if (bodyFaInput) {
         bodyFaInput.addEventListener("input", () => {
             runAutoTextTools();
+        });
+    }
+
+    if (bodyEnInput) {
+        bodyEnInput.addEventListener("input", () => {
+            const current = bodyEnInput.value || "";
+            hasManualBodyEnOverride = current !== lastAutoFinglishBodyValue;
         });
     }
 
@@ -2498,6 +2548,7 @@ function initAdminMode() {
                     imageUrlInput.value = imageValue;
                 }
                 setImagePreview(imageValue);
+                refreshBodyEnOverrideState();
                 runAutoTextTools(true);
                 const saveBtn = document.getElementById("save-letter-btn");
                 if (saveBtn) {
