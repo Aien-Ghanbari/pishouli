@@ -73,6 +73,12 @@ If you are upgrading to the version with letter images, also run:
 wrangler d1 execute pishouli-db --remote --file=./migrations/0003_add_letter_image.sql
 ```
 
+If you are upgrading to the version with Seq2Seq training dataset pairs, also run:
+
+```bash
+wrangler d1 execute pishouli-db --remote --file=./migrations/0004_add_seq2seq_training_pairs.sql
+```
+
 6. Set bootstrap secret
 
 ```bash
@@ -127,6 +133,8 @@ After room setup, do not expose the bootstrap key to clients.
 - `POST /api/visits/start`
 - `POST /api/visits/end`
 - `GET /api/admin/logs` (admin)
+- `GET /api/admin/dataset` (admin, active pairs)
+- `GET /api/admin/dataset?includeInactive=1` (admin, full history)
 
 ## Frontend integration checklist
 

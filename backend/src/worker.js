@@ -92,6 +92,10 @@ export default {
         return await getAdminLogs(request, env, corsHeaders);
       }
 
+      if (request.method === "GET" && path === "/api/admin/dataset") {
+        return await getAdminDataset(request, env, corsHeaders);
+      }
+
       return json({ error: "Not found" }, 404, corsHeaders);
     } catch (error) {
       return json({ error: "Server error", details: String(error?.message || error) }, 500, corsHeaders);
@@ -320,6 +324,8 @@ async function createLetter(request, env, corsHeaders) {
     "INSERT INTO letters (id, room_id, mood, title_fa, body_fa, title_en, body_en, image_url, is_visible, created_at, updated_at, deleted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, ?10, 0)"
   ).bind(id, auth.roomId, mood, titleFa, bodyFa, titleEn, bodyEn, imageUrl, now, now).run();
 
+  await upsertSeq2SeqPair(env, auth.roomId, id, bodyFa, bodyEn, now);
+
   return json({ ok: true, id }, 201, corsHeaders);
 }
 
@@ -359,6 +365,10 @@ async function syncLetters(request, env, corsHeaders) {
     "UPDATE letters SET deleted = 1, updated_at = ?1 WHERE room_id = ?2"
   ).bind(now, auth.roomId).run();
 
+  await env.DB.prepare(
+    "UPDATE seq2seq_training_pairs SET is_active = 0, updated_at = ?1 WHERE room_id = ?2"
+  ).bind(now, auth.roomId).run();
+
   for (const letter of normalized) {
     await env.DB.prepare(
       "INSERT INTO letters (id, room_id, mood, title_fa, body_fa, title_en, body_en, image_url, is_visible, created_at, updated_at, deleted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0) ON CONFLICT(id) DO UPDATE SET room_id=excluded.room_id, mood=excluded.mood, title_fa=excluded.title_fa, body_fa=excluded.body_fa, title_en=excluded.title_en, body_en=excluded.body_en, image_url=excluded.image_url, is_visible=excluded.is_visible, updated_at=excluded.updated_at, deleted=0"
@@ -375,6 +385,8 @@ async function syncLetters(request, env, corsHeaders) {
       now,
       now
     ).run();
+
+    await upsertSeq2SeqPair(env, auth.roomId, letter.id, letter.bodyFa, letter.bodyEn, now);
   }
 
   return json({ ok: true, count: normalized.length }, 200, corsHeaders);
@@ -412,6 +424,8 @@ async function updateLetter(request, env, corsHeaders) {
     return json({ error: "Letter not found." }, 404, corsHeaders);
   }
 
+  await upsertSeq2SeqPair(env, auth.roomId, id, bodyFa, bodyEn, nowIso());
+
   return json({ ok: true }, 200, corsHeaders);
 }
 
@@ -434,6 +448,10 @@ async function deleteLetter(request, env, corsHeaders) {
   if (!result.success || (result.meta && result.meta.changes === 0)) {
     return json({ error: "Letter not found." }, 404, corsHeaders);
   }
+
+  await env.DB.prepare(
+    "UPDATE seq2seq_training_pairs SET is_active = 0, updated_at = ?1 WHERE room_id = ?2 AND letter_id = ?3"
+  ).bind(nowIso(), auth.roomId, id).run();
 
   return json({ ok: true }, 200, corsHeaders);
 }
@@ -559,6 +577,42 @@ async function getAdminLogs(request, env, corsHeaders) {
     clickLogs: eventsRes.results || [],
     lastVisits: visits
   }, 200, corsHeaders);
+}
+
+async function getAdminDataset(request, env, corsHeaders) {
+  const auth = await requireAdminAuth(request, env);
+  if (!auth.ok) {
+    return json({ error: auth.error }, auth.status, corsHeaders);
+  }
+
+  const url = new URL(request.url);
+  const includeInactive = url.searchParams.get("includeInactive") === "1";
+
+  const rows = includeInactive
+    ? await env.DB.prepare(
+      "SELECT id, letter_id, persian_text, finglish_text, pair_quality, is_active, created_at, updated_at FROM seq2seq_training_pairs WHERE room_id = ?1 ORDER BY updated_at DESC LIMIT 1000"
+    ).bind(auth.roomId).all()
+    : await env.DB.prepare(
+      "SELECT id, letter_id, persian_text, finglish_text, pair_quality, is_active, created_at, updated_at FROM seq2seq_training_pairs WHERE room_id = ?1 AND is_active = 1 ORDER BY updated_at DESC LIMIT 1000"
+    ).bind(auth.roomId).all();
+
+  return json({
+    roomId: auth.roomId,
+    dataset: rows.results || []
+  }, 200, corsHeaders);
+}
+
+async function upsertSeq2SeqPair(env, roomId, letterId, persianText, finglishText, now = nowIso()) {
+  const persian = ensureString(persianText, 5000);
+  const finglish = ensureString(finglishText, 5000);
+
+  if (!persian || !finglish) {
+    return;
+  }
+
+  await env.DB.prepare(
+    "INSERT INTO seq2seq_training_pairs (room_id, letter_id, persian_text, finglish_text, source_type, pair_quality, is_active, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'admin_textbox', 3, 1, ?5, ?6) ON CONFLICT(room_id, letter_id) DO UPDATE SET persian_text = excluded.persian_text, finglish_text = excluded.finglish_text, is_active = 1, updated_at = excluded.updated_at"
+  ).bind(roomId, letterId, persian, finglish, now, now).run();
 }
 
 function safeJsonParseArray(raw) {
